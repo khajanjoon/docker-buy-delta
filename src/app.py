@@ -1,16 +1,14 @@
 import requests
 import asyncio
 import json
-Authorization = 'qQt+ZMVQZ3c3dzmomq8xeYeuR4akxg51RkeTSi5XRssZkTNwIt'
 
+Authorization = '7ygBbjKWiBdB7XwblKVKnZfMFj1dnz458qNiizq10chfKU0Mhf1'
 
 async def fetch_profile_data():
     while True:
-        # Fetch data from REST API
-        requests.post("https://ntfy.sh/sell_algo",
-        data="sell algo live  ".encode(encoding='utf-8'))
 
-       
+        requests.post("https://ntfy.sh/buy_algo",
+        data="Buy Algo Live😀".encode(encoding='utf-8'))
         await asyncio.sleep(300)
 
 async def place_target_order(order_type,side,order_product,order_size,stop_order_type,stop_price):
@@ -27,7 +25,6 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
     }
     print(payload)
     # Fetch data from REST API
-   
     
 
     headers = {
@@ -42,8 +39,8 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
     # Check if the request was successful
     if response.status_code == 200:
         print("Order placed successfully.")
-        requests.post("https://ntfy.sh/delta_trade",
-        data="Order placed successfully ".encode(encoding='utf-8'))
+        requests.post("https://ntfy.sh/buy_trade",
+        data="order successful 😀".encode(encoding='utf-8'))
     else:
         print("Failed to place order. Status code:", response.status_code)
 
@@ -72,10 +69,10 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
     
     # Check if the request was successful
     if response.status_code == 200:
-        requests.post("https://ntfy.sh/delta_trade",
-        data="Order placed successfully ".encode(encoding='utf-8'))
         print("Order placed successfully.")
-        await place_target_order("market_order","buy",order_product_id,1,"take_profit_order",target_value )
+        requests.post("https://ntfy.sh/buy_trade",
+        data="order successful 😀".encode(encoding='utf-8'))
+        await place_target_order("market_order","sell",order_product_id,1,"take_profit_order",target_value )
     else:
         print("Failed to place order. Status code:", response.status_code)
       
@@ -83,7 +80,7 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
 async def fetch_position_data():
     while True:
         # Fetch data from REST API
-        
+       
 
         headers = {
           'Authorization': Authorization, 
@@ -127,27 +124,22 @@ async def fetch_position_data():
            percentage = int(size)*.75 # Assuming 10% for demonstration purposes
            price_value = float(entry_price)-(float(entry_price) * (percentage / 100)) 
            tick_size = 0.05
-           target = float(entry_price)*2/100-float(entry_price)
-           target =round(target* 20) / 20
-           target_value = abs(target)
-           
-           print( price_value)
-           print(target_value)
-           
-           print()  # Add an empty line for better readability between each dictionary's data
-           if (float(mark_price) > price_value) :
+           target = float(entry_price)*2/100+float(entry_price)
+           target_value = round(target / tick_size) * tick_size
+           print(price_value)
+           print(target_value)  # Add an empty line for better readability between each dictionary's data
+           if (float(mark_price) < price_value) :
 
-            print("ready to sell")
+            print("ready to buy")
             print()  # Add an empty line for better readability between each dictionary's data
-            await place_order("market_order","sell",product_id,1,0,target_value )  
+            await place_order("market_order","buy",product_id,1,0,target_value )  
             print()  # Add an empty line for better readability between each dictionary's data
    
         # Wait for 60 seconds before fetching again
         await asyncio.sleep(30)
 
 async def main():
-    # Run WebSocket connection coroutine
-    #socket_task = asyncio.create_task(connect_to_socket())
+
     # Run profile data fetching coroutine
     profile_task = asyncio.create_task(fetch_profile_data())
     position_task = asyncio.create_task(fetch_position_data())
