@@ -10,10 +10,10 @@ BOT_TOKEN = '7003653511:AAGkx1MumC07d4gJh9zb9l7dCqDfyeTHjtY'
 CHAT_ID = '311396636'
 
 async def fetch_profile_data():
-    while True:
+    
         
-        send_message("Buy Algo Live😀")
-        await asyncio.sleep(300)
+        send_message("😀Buy Algo Live😀")
+        
 
 async def place_target_order(order_type,side,order_product,order_size,stop_order_type,stop_price):
     # Define the payload
@@ -42,7 +42,7 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
     # Check if the request was successful
     if response.status_code == 200:
         print("Order placed successfully.")
-        message = f"New Order:\n" \
+        message = f"😀New Order:\n" \
           f"Order Type: {payload['order_type']}\n" \
           f"Side: {payload['side']}\n" \
           f"Product ID: {payload['product_id']}\n" \
@@ -50,7 +50,7 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
           f"Stop Price: {payload['stop_price']}\n" \
           f"Reduce Only: {payload['reduce_only']}\n" \
           f"Stop Trigger Method: {payload['stop_trigger_method']}\n" \
-          f"Size: {payload['size']}"
+          f"Size: {payload['size']}😀"
         send_message(message)
     else:
         print("Failed to place order. Status code:", response.status_code)
@@ -80,12 +80,12 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
     
     # Check if the request was successful
     if response.status_code == 200:
-        message = f"New Order:\n" \
+        message = f"😀New Order:\n" \
           f"Order Type: {payload['order_type']}\n" \
           f"Side: {payload['side']}\n" \
           f"Product ID: {payload['product_id']}\n" \
           f"Reduce Only: {'Yes' if payload['reduce_only'] else 'No'}\n" \
-          f"Size: {payload['size']}"
+          f"Size: {payload['size']}😀"
         send_message(message)
         await place_target_order("market_order","sell",order_product_id,1,"take_profit_order",target_value )
     else:
@@ -128,15 +128,15 @@ async def fetch_position_data():
            percentage = int(size)*.75 # Assuming 10% for demonstration purposes
            price_value = float(entry_price)-(float(entry_price) * (percentage / 100)) 
            tick_size = 0.05
-           target = float(entry_price)*2/100+float(entry_price)
+           target = float(nark_price)*2/100+float(mark_price)
            target_value = round(target / tick_size) * tick_size
            print(price_value)
-           print(target_value) 
+           
            message = f"Symbol: {product_symbol}\n" \
           f"Size: {size}\n" \
           f"Unrealized PnL: {round((float(unrealized_pnl) ), 2) }\n" \
           f"Entry Price: {round((float(entry_price) ), 2) }\n" \
-          f"target_Value: {round((float(target_value) ), 2) }\n" \
+          f"Next_Entry: {round((float(target_value) ), 2) }\n" \
           f"Mark Price: {round((float(mark_price) ), 2) }\n"
             
            send_message(message)
