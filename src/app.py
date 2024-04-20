@@ -128,7 +128,7 @@ async def fetch_position_data():
            percentage = int(size)*.75 # Assuming 10% for demonstration purposes
            price_value = float(entry_price)-(float(entry_price) * (percentage / 100)) 
            tick_size = 0.05
-           target = float(nark_price)*2/100+float(mark_price)
+           target = float(mark_price)*2/100+float(mark_price)
            target_value = round(target / tick_size) * tick_size
            print(price_value)
            
