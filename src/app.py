@@ -4,13 +4,15 @@ import json
 import os
 
 Authorization = os.environ['token']
-#'7ygBbjKWiBdB7XwblKVKnZfMFj1dnz458qNiizq10chfKU0Mhf1'
+# Replace 'YOUR_BOT_TOKEN' with your actual bot token
+BOT_TOKEN = '7003653511:AAGkx1MumC07d4gJh9zb9l7dCqDfyeTHjtY'
+# Replace 'YOUR_CHAT_ID' with the chat ID you want to send the message to
+CHAT_ID = '311396636'
 
 async def fetch_profile_data():
     while True:
-
-        requests.post("https://ntfy.sh/buy_algo",
-        data="Buy Algo Live😀".encode(encoding='utf-8'))
+        
+        send_message("Buy Algo Live😀")
         await asyncio.sleep(300)
 
 async def place_target_order(order_type,side,order_product,order_size,stop_order_type,stop_price):
@@ -25,7 +27,6 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
         "stop_trigger_method": "mark_price",
         "size": order_size
     }
-    print(payload)
     # Fetch data from REST API
     
 
@@ -41,8 +42,16 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
     # Check if the request was successful
     if response.status_code == 200:
         print("Order placed successfully.")
-        requests.post("https://ntfy.sh/buy_trade",
-        data="order successful 😀".encode(encoding='utf-8'))
+        message = f"New Order:\n" \
+          f"Order Type: {payload['order_type']}\n" \
+          f"Side: {payload['side']}\n" \
+          f"Product ID: {payload['product_id']}\n" \
+          f"Stop Order Type: {payload['stop_order_type']}\n" \
+          f"Stop Price: {payload['stop_price']}\n" \
+          f"Reduce Only: {payload['reduce_only']}\n" \
+          f"Stop Trigger Method: {payload['stop_trigger_method']}\n" \
+          f"Size: {payload['size']}"
+        send_message(message)
     else:
         print("Failed to place order. Status code:", response.status_code)
 
@@ -71,13 +80,16 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
     
     # Check if the request was successful
     if response.status_code == 200:
-        print("Order placed successfully.")
-        requests.post("https://ntfy.sh/buy_trade",
-        data="order successful 😀".encode(encoding='utf-8'))
+        message = f"New Order:\n" \
+          f"Order Type: {payload['order_type']}\n" \
+          f"Side: {payload['side']}\n" \
+          f"Product ID: {payload['product_id']}\n" \
+          f"Reduce Only: {'Yes' if payload['reduce_only'] else 'No'}\n" \
+          f"Size: {payload['size']}"
+        send_message(message)
         await place_target_order("market_order","sell",order_product_id,1,"take_profit_order",target_value )
     else:
-        print("Failed to place order. Status code:", response.status_code)
-      
+        send_message(response)
 
 async def fetch_position_data():
     while True:
@@ -108,17 +120,7 @@ async def fetch_position_data():
            entry_price = result["entry_price"]
            mark_price = result["mark_price"]
            # Print the extracted data
-           print("Product ID:", product_id, 
-            "Product Symbol:", product_symbol, 
-            "Realized Cashflow:", realized_cashflow, 
-            "Realized Funding:", realized_funding, 
-            "Realized PnL:", realized_pnl, 
-            "Size:", size, 
-            "Unrealized PnL:", unrealized_pnl, 
-            "Updated At:", updated_at, 
-            "User ID:", user_id, 
-            "entry_price:", entry_price, 
-            "mark_price:", mark_price)
+           
 
            print()  # Add an empty line for better readability between each dictionary's data
 
@@ -129,9 +131,18 @@ async def fetch_position_data():
            target = float(entry_price)*2/100+float(entry_price)
            target_value = round(target / tick_size) * tick_size
            print(price_value)
-           print(target_value)  # Add an empty line for better readability between each dictionary's data
+           print(target_value) 
+           message = f"Symbol: {product_symbol}\n" \
+          f"Size: {size}\n" \
+          f"Unrealized PnL: {round((float(unrealized_pnl) ), 2) }\n" \
+          f"Entry Price: {round((float(entry_price) ), 2) }\n" \
+          f"target_Value: {round((float(target_value) ), 2) }\n" \
+          f"Mark Price: {round((float(mark_price) ), 2) }\n"
+            
+           send_message(message)
+            # Add an empty line for better readability between each dictionary's data
            if (float(mark_price) < price_value) :
-
+            
             print("ready to buy")
             print()  # Add an empty line for better readability between each dictionary's data
             await place_order("market_order","buy",product_id,1,0,target_value )  
@@ -139,6 +150,17 @@ async def fetch_position_data():
    
         # Wait for 60 seconds before fetching again
         await asyncio.sleep(30)
+
+        
+def send_message(message):
+    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
+    params = {'chat_id': CHAT_ID, 'text': message}
+
+    response = requests.post(url, json=params)
+    if response.status_code == 200:
+        print('Message sent successfully!')
+    else:
+        print(f'Failed to send message. Error: {response.status_code} - {response.text}')
 
 async def main():
 
