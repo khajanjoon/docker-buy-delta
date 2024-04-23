@@ -1,4 +1,3 @@
 requests
 asyncio
-micropython-hashlib
 hmac
