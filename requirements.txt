@@ -1,3 +1,11 @@
-websockets
 requests
 asyncio
+json
+os
+hashlib
+hmac
+time
+datetime
+hashlib
+hmac
+base64
