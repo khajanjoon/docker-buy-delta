@@ -58,7 +58,8 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
     # Fetch data from REST API
     method = 'POST'
     endpoint = '/v2/orders'
-    signature, timestamp = generate_signature(method, endpoint, payload)
+    payload_str = json.dumps(payload)
+    signature, timestamp = generate_signature(method, endpoint, payload_str)
     timestamp = get_time_stamp() 
 
     headers = {
@@ -85,7 +86,6 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
           f"Stop Trigger Method: {payload['stop_trigger_method']}\n" \
           f"Size: {payload['size']}😀"
         send_message(message)
-        print(response)
     else:
         print("Failed to place order. Status code:", response.status_code)
 
@@ -103,8 +103,10 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
     # Fetch data from REST API
     method = 'POST'
     endpoint = '/v2/orders'
-    signature, timestamp = generate_signature(method, endpoint, payload)
+    payload_str = json.dumps(payload)
+    signature, timestamp = generate_signature(method, endpoint, payload_str)
     timestamp = get_time_stamp() 
+    
 
     headers = {
          'api-key': api_key,
@@ -125,7 +127,6 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
           f"Reduce Only: {'Yes' if payload['reduce_only'] else 'No'}\n" \
           f"Size: {payload['size']}😀"
         send_message(message)
-        print(response)
         await place_target_order("market_order","sell",order_product_id,1,"take_profit_order",target_value )
     else:
         send_message(response)
@@ -136,10 +137,12 @@ async def fetch_position_data():
        
         payload = ''
         method = 'GET'
-        timestamp = get_time_stamp() 
+        
         method = 'GET'
         endpoint = '/v2/positions/margined'
+        payload_str = json.dumps(payload)
         signature, timestamp = generate_signature(method, endpoint, payload)
+        timestamp = get_time_stamp() 
 
         headers = {
          'api-key': api_key,
@@ -210,12 +213,18 @@ def send_message(message):
         print(f'Failed to send message. Error: {response.status_code} - {response.text}')
 
 async def main():
-
-    # Run profile data fetching coroutine
-    profile_task = asyncio.create_task(fetch_profile_data())
-    position_task = asyncio.create_task(fetch_position_data())
-    # Wait for both tasks to complete
-    await asyncio.gather(position_task, profile_task)
+    while True:
+        try:
+            profile_task = asyncio.create_task(fetch_profile_data())
+            position_task = asyncio.create_task(fetch_position_data())
+            await asyncio.gather(position_task, profile_task)
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            # Optionally, you can add code here to handle the error, such as logging it
+            # or sending a notification
+        finally:
+            # Optionally, you can add a delay here before retrying
+            await asyncio.sleep(10)
     
 
 # Run the main coroutine
