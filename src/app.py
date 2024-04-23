@@ -2,17 +2,44 @@ import requests
 import asyncio
 import json
 import os
+import hashlib
+import hmac
+import time
+import datetime
+import hashlib
+import hmac
+import base64
 
-Authorization = os.environ['token']
-# Replace 'YOUR_BOT_TOKEN' with your actual bot token
+
+
+api_key = 'xFIdqIAYlMojHcLKQxaYcI9F22xWZg'
+api_secret = 'uI4Qa6swjkAWmioPsamHr6oAZRs5R07oGU9UapAsqhFlRt1vWoHLWj5GFGhz'
+
+def generate_signature(method, endpoint, payload):
+    timestamp = str(int(time.time()))
+    signature_data = method + timestamp + endpoint + payload
+    message = bytes(signature_data, 'utf-8')
+    secret = bytes(api_secret, 'utf-8')
+    hash = hmac.new(secret, message, hashlib.sha256)
+    return hash.hexdigest(), timestamp
+
+def get_time_stamp():
+    d = datetime.datetime.utcnow()
+    epoch = datetime.datetime(1970,1,1)
+    return str(int((d - epoch).total_seconds()))
+
+
+
+
+
+
 BOT_TOKEN = '7003653511:AAGkx1MumC07d4gJh9zb9l7dCqDfyeTHjtY'
 # Replace 'YOUR_CHAT_ID' with the chat ID you want to send the message to
 CHAT_ID = '311396636'
 
 async def fetch_profile_data():
     
-        
-        send_message("😀Buy Algo Live😀")
+  send_message("response")
         
 
 async def place_target_order(order_type,side,order_product,order_size,stop_order_type,stop_price):
@@ -28,13 +55,19 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
         "size": order_size
     }
     # Fetch data from REST API
-    
+    # Fetch data from REST API
+    method = 'POST'
+    endpoint = '/v2/orders'
+    signature, timestamp = generate_signature(method, endpoint, payload)
+    timestamp = get_time_stamp() 
 
     headers = {
-      'Authorization': Authorization, 
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
-      'Content-Type': 'application/json'
-    }
+         'api-key': api_key,
+         'timestamp': timestamp,
+         'signature': signature,
+         'User-Agent': 'rest-client',
+         'Content-Type': 'application/json'
+           }
 
     # Send the POST request with the payload
     response = requests.post('https://cdn.india.deltaex.org/v2/orders', json=payload, headers=headers)
@@ -67,14 +100,18 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
     }
     
     # Fetch data from REST API
-    
+    method = 'POST'
+    endpoint = '/v2/orders'
+    signature, timestamp = generate_signature(method, endpoint, payload)
+    timestamp = get_time_stamp() 
 
     headers = {
-      'Authorization': Authorization, 
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
-      'Content-Type': 'application/json'
-    }
-
+         'api-key': api_key,
+         'timestamp': timestamp,
+         'signature': signature,
+         'User-Agent': 'rest-client',
+         'Content-Type': 'application/json'
+           }
     # Send the POST request with the payload
     response = requests.post('https://cdn.india.deltaex.org/v2/orders', json=payload, headers=headers)
     
@@ -95,12 +132,20 @@ async def fetch_position_data():
     while True:
         # Fetch data from REST API
        
+        payload = ''
+        method = 'GET'
+        timestamp = get_time_stamp() 
+        method = 'GET'
+        endpoint = '/v2/positions/margined'
+        signature, timestamp = generate_signature(method, endpoint, payload)
 
         headers = {
-          'Authorization': Authorization, 
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15',
-          'Content-Type': 'application/json'
-        }
+         'api-key': api_key,
+         'timestamp': timestamp,
+         'signature': signature,
+         'User-Agent': 'rest-client',
+         'Content-Type': 'application/json'
+  }
 
         r = requests.get('https://cdn.india.deltaex.org/v2/positions/margined', headers=headers)
         position_data = r.json()  # Extract JSON data using .json() method
@@ -136,7 +181,7 @@ async def fetch_position_data():
           f"Size: {size}\n" \
           f"Unrealized PnL: {round((float(unrealized_pnl) ), 2) }\n" \
           f"Entry Price: {round((float(entry_price) ), 2) }\n" \
-          f"Next_Entry: {round((float(target_value) ), 2) }\n" \
+          f"Next_Entry: {round((float(price_value) ), 2) }\n" \
           f"Mark Price: {round((float(mark_price) ), 2) }\n"
             
            send_message(message)
