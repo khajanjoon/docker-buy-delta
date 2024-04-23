@@ -85,6 +85,7 @@ async def place_target_order(order_type,side,order_product,order_size,stop_order
           f"Stop Trigger Method: {payload['stop_trigger_method']}\n" \
           f"Size: {payload['size']}😀"
         send_message(message)
+        print(response)
     else:
         print("Failed to place order. Status code:", response.status_code)
 
@@ -124,6 +125,7 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
           f"Reduce Only: {'Yes' if payload['reduce_only'] else 'No'}\n" \
           f"Size: {payload['size']}😀"
         send_message(message)
+        print(response)
         await place_target_order("market_order","sell",order_product_id,1,"take_profit_order",target_value )
     else:
         send_message(response)
@@ -149,7 +151,7 @@ async def fetch_position_data():
 
         r = requests.get('https://cdn.india.deltaex.org/v2/positions/margined', headers=headers)
         position_data = r.json()  # Extract JSON data using .json() method
-        #print("Position Data:", position_data)
+        print("Position Data:", position_data)
         # Extract product_id and realized_pnl from each result
         # Extract data from each dictionary in the 'result' list
         for result in position_data["result"]:
