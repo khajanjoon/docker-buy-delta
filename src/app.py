@@ -9,7 +9,7 @@ import datetime
 import hashlib
 import hmac
 import base64
-
+from decimal import Decimal
 
 
 api_key = 'uchdkmNnl8escJBjaKDS7zV9qhKudN'
@@ -39,8 +39,8 @@ CHAT_ID = '311396636'
 
 async def fetch_profile_data():
     
-  send_message("response")
-        
+   print("response")
+   send_message("Algo Start")    
 
 async def place_target_order(order_type,side,order_product,order_size,stop_order_type,stop_price):
     # Define the payload
@@ -154,7 +154,8 @@ async def fetch_position_data():
 
         r = requests.get('https://cdn.india.deltaex.org/v2/positions/margined', headers=headers)
         position_data = r.json()  # Extract JSON data using .json() method
-        print("Position Data:", position_data)
+        #print("Position Data:", position_data)
+        send_message("Algo Live") 
         # Extract product_id and realized_pnl from each result
         # Extract data from each dictionary in the 'result' list
         for result in position_data["result"]:
@@ -169,6 +170,7 @@ async def fetch_position_data():
            user_id = result["user_id"]
            entry_price = result["entry_price"]
            mark_price = result["mark_price"]
+          
            # Print the extracted data
            
 
@@ -177,19 +179,28 @@ async def fetch_position_data():
            # Percentage of entry price
            percentage = int(size)*.75 # Assuming 10% for demonstration purposes
            price_value = float(entry_price)-(float(entry_price) * (percentage / 100)) 
-           tick_size = 0.05
+           digit_count = count_digits_after_point(mark_price)
+           #print(digit_count)
+           tick_size = 1/digit_count
+           #print(tick_size)
            target = float(mark_price)*2/100+float(mark_price)
-           target_value = round(target / tick_size) * tick_size
-           print(price_value)
+           number  = round((target / tick_size) * tick_size,digit_count)
+           # Example usage
+           target_value=number
+           decimal_number = scientific_to_decimal(number)
+           
+         
            
            message = f"Symbol: {product_symbol}\n" \
           f"Size: {size}\n" \
-          f"Unrealized PnL: {round((float(unrealized_pnl) ), 2) }\n" \
-          f"Entry Price: {round((float(entry_price) ), 2) }\n" \
-          f"Next_Entry: {round((float(price_value) ), 2) }\n" \
-          f"Mark Price: {round((float(mark_price) ), 2) }\n"
-            
-           send_message(message)
+          f"Unrealized PnL: {round((float(unrealized_pnl) ), digit_count) }\n" \
+          f"Entry Price: {round((float(entry_price) ), digit_count) }\n" \
+          f"Next_Entry: {round((float(price_value) ), digit_count) }\n" \
+          f"Mark Price: {round((float(mark_price) ), digit_count) }\n"  \
+          f"target_value: {round((float(decimal_number) ), digit_count) }\n"
+          
+           print(message) 
+           #send_message(message)
             # Add an empty line for better readability between each dictionary's data
            if (float(mark_price) < price_value) :
             
@@ -201,7 +212,26 @@ async def fetch_position_data():
         # Wait for 60 seconds before fetching again
         await asyncio.sleep(30)
 
-        
+def count_digits_after_point(number):
+    # Convert the number to a string
+    number_str = str(number)
+    
+    # Split the string at the decimal point
+    parts = number_str.split('.')
+    
+    # Check if there is a decimal part
+    if len(parts) == 2:
+        # Return the length of the decimal part
+        return len(parts[1])
+    else:
+        # Return 0 if there is no decimal part
+        return 0
+
+def scientific_to_decimal(number):
+    # Convert the number to a Decimal and return as string
+    decimal_number = Decimal(number)
+    return str(decimal_number)
+
 def send_message(message):
     url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
     params = {'chat_id': CHAT_ID, 'text': message}
@@ -211,6 +241,22 @@ def send_message(message):
         print('Message sent successfully!')
     else:
         print(f'Failed to send message. Error: {response.status_code} - {response.text}')
+
+def auto_topup(message):
+    headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'api-key': '****',
+      'signature': '****',
+      'timestamp': '****'
+      }
+
+    r = requests.put('https://api.delta.exchange/v2/positions/auto_topup', params={
+    "product_id": 0,
+    "auto_topup": "false"
+    }, headers = headers)
+    print(r.json())
+
 
 async def main():
     while True:
