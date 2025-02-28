@@ -12,8 +12,8 @@ import base64
 from decimal import Decimal
 
 
-api_key = 'uchdkmNnl8escJBjaKDS7zV9qhKudN'
-api_secret = 'Ty70sRGTXGZg2yiWqv2WNaZVK43J3a7ySNsKEbmrFOrjWfai6XSmk8mfJ8Hm'
+api_key = 'WqLMWdFHsYrWt5dHELyBkZXzVw54s4'
+api_secret = 'ux8394Juap4ZzvA3oXPYkgVaR4MAza6BwsKWLTOVCFNcv5wgPi3HAb0Pqirm'
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
@@ -177,7 +177,7 @@ async def fetch_position_data():
            print()  # Add an empty line for better readability between each dictionary's data
 
            # Percentage of entry price
-           percentage = int(size)*.75 # Assuming 10% for demonstration purposes
+           percentage = int(size)*1 # Assuming 10% for demonstration purposes
            price_value = float(entry_price)-(float(entry_price) * (percentage / 100)) 
            digit_count = count_digits_after_point(mark_price)
            #print(digit_count)
