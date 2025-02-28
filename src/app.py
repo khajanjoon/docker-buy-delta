@@ -12,8 +12,8 @@ import base64
 from decimal import Decimal
 
 
-api_key = 'WqLMWdFHsYrWt5dHELyBkZXzVw54s4'
-api_secret = 'ux8394Juap4ZzvA3oXPYkgVaR4MAza6BwsKWLTOVCFNcv5wgPi3HAb0Pqirm'
+api_key = 'jStY6DkilzfHFpexXd7aWim5us9qlK'
+api_secret = 'o6yy45lX5x0YX9dZoLFkkiP68p23fkVHTcgnXutgv3ZUNPmxHDBEb9lXggfQ'
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
