@@ -10,10 +10,16 @@ import hashlib
 import hmac
 import base64
 from decimal import Decimal
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
-api_key = 'jStY6DkilzfHFpexXd7aWim5us9qlK'
-api_secret = 'o6yy45lX5x0YX9dZoLFkkiP68p23fkVHTcgnXutgv3ZUNPmxHDBEb9lXggfQ'
+# Access API keys and other credentials
+API_KEY = os.getenv("API_KEY")
+API_SECRET = os.getenv("API_SECRET")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID")
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
@@ -33,9 +39,6 @@ def get_time_stamp():
 
 
 
-BOT_TOKEN = '7003653511:AAGkx1MumC07d4gJh9zb9l7dCqDfyeTHjtY'
-# Replace 'YOUR_CHAT_ID' with the chat ID you want to send the message to
-CHAT_ID = '311396636'
 
 async def fetch_profile_data():
     
@@ -132,85 +135,66 @@ async def place_order(order_type,side,order_product_id,order_size,stop_order_typ
         send_message(response)
 
 async def fetch_position_data():
+    last_msg_time = 0  # Store last message sent timestamp
+
     while True:
-        # Fetch data from REST API
-       
         payload = ''
-        method = 'GET'
-        
         method = 'GET'
         endpoint = '/v2/positions/margined'
         payload_str = json.dumps(payload)
         signature, timestamp = generate_signature(method, endpoint, payload)
-        timestamp = get_time_stamp() 
+        timestamp = get_time_stamp()
 
         headers = {
-         'api-key': api_key,
-         'timestamp': timestamp,
-         'signature': signature,
-         'User-Agent': 'rest-client',
-         'Content-Type': 'application/json'
-  }
+            'api-key': api_key,
+            'timestamp': timestamp,
+            'signature': signature,
+            'User-Agent': 'rest-client',
+            'Content-Type': 'application/json'
+        }
 
         r = requests.get('https://cdn.india.deltaex.org/v2/positions/margined', headers=headers)
-        position_data = r.json()  # Extract JSON data using .json() method
-        #print("Position Data:", position_data)
-        send_message("Algo Live") 
-        # Extract product_id and realized_pnl from each result
-        # Extract data from each dictionary in the 'result' list
+        position_data = r.json()  
+
         for result in position_data["result"]:
-           product_id = result["product_id"]
-           product_symbol = result["product_symbol"]
-           realized_cashflow = result["realized_cashflow"]
-           realized_funding = result["realized_funding"]
-           realized_pnl = result["realized_pnl"]
-           size = result["size"]
-           unrealized_pnl = result["unrealized_pnl"]
-           updated_at = result["updated_at"]
-           user_id = result["user_id"]
-           entry_price = result["entry_price"]
-           mark_price = result["mark_price"]
-          
-           # Print the extracted data
-           
+            product_symbol = result["product_symbol"]
+            size = result["size"]
+            unrealized_pnl = result["unrealized_pnl"]
+            entry_price = result["entry_price"]
+            mark_price = result["mark_price"]
 
-           print()  # Add an empty line for better readability between each dictionary's data
+            percentage = int(size) * 1  
+            avg_price_value = float(entry_price) - (float(entry_price) * (percentage / 100))
+            add_price_value = float(entry_price) + (float(entry_price) * (percentage / 100))
 
-           # Percentage of entry price
-           percentage = int(size)*2 # Assuming 10% for demonstration purposes
-           price_value = float(entry_price)-(float(entry_price) * (percentage / 100)) 
-           digit_count = count_digits_after_point(mark_price)
-           #print(digit_count)
-           tick_size = 1/digit_count
-           #print(tick_size)
-           target = float(mark_price)*5/100+float(mark_price)
-           number  = round((target / tick_size) * tick_size,digit_count)
-           # Example usage
-           target_value=number
-           decimal_number = scientific_to_decimal(number)
-           
-         
-           
-           message = f"Symbol: {product_symbol}\n" \
-          f"Size: {size}\n" \
-          f"Unrealized PnL: {round((float(unrealized_pnl) ), digit_count) }\n" \
-          f"Entry Price: {round((float(entry_price) ), digit_count) }\n" \
-          f"Next_Entry: {round((float(price_value) ), digit_count) }\n" \
-          f"Mark Price: {round((float(mark_price) ), digit_count) }\n"  \
-          f"target_value: {round((float(decimal_number) ), digit_count) }\n"
-          
-           print(message) 
-           #send_message(message)
-            # Add an empty line for better readability between each dictionary's data
-           if (float(mark_price) < price_value) :
-            
-            print("ready to buy")
-            print()  # Add an empty line for better readability between each dictionary's data
-            await place_order("market_order","buy",product_id,1,0,target_value )  
-            print()  # Add an empty line for better readability between each dictionary's data
-   
-        # Wait for 60 seconds before fetching again
-        await asyncio.sleep(30)
+            digit_count = count_digits_after_point(mark_price)
+            tick_size = 1 / digit_count
+            target = float(mark_price) * 5 / 100 + float(mark_price)
+            number = round((target / tick_size) * tick_size, digit_count)
+            target_value = scientific_to_decimal(number)
+
+            message = f"Symbol: {product_symbol}\n" \
+                      f"Size: {size}\n" \
+                      f"Unrealized PnL: {round(float(unrealized_pnl), digit_count)}\n" \
+                      f"Entry Price: {round(float(entry_price), digit_count)}\n" \
+                      f"Next_Avg_Price: {round(float(avg_price_value), digit_count)}\n" \
+                      f"Next_Add_Price: {round(float(add_price_value), digit_count)}\n" \
+                      f"Mark Price: {round(float(mark_price), digit_count)}\n" \
+                      f"Target Value: {round(float(target_value), digit_count)}\n"
+
+            print(message)
+
+            # Send message only if 60 seconds have passed since last message
+            if time.time() - last_msg_time >= 60:
+                send_message(message)
+                last_msg_time = time.time()  # Update last message time
+
+            if float(mark_price) < avg_price_value or float(mark_price) > add_price_value:
+                print("Ready to buy")
+                await place_order("market_order", "buy", result["product_id"], 1, 0, target_value)
+
+        await asyncio.sleep(10)  # Fetch data every 30 seconds
+
 
 def count_digits_after_point(number):
     # Convert the number to a string
