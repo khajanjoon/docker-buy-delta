@@ -218,8 +218,9 @@ def scientific_to_decimal(number):
     return str(decimal_number)
 
 def send_message(message):
-    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-    params = {'chat_id': CHAT_ID, 'text': message}
+    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+    params = {'chat_id': chat_id, 'text': message}
+
 
     response = requests.post(url, json=params)
     if response.status_code == 200:
