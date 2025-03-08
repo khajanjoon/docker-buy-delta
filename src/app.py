@@ -15,11 +15,12 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Access API keys and other credentials
-API_KEY = os.getenv("API_KEY")
-API_SECRET = os.getenv("API_SECRET")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHAT_ID = os.getenv("CHAT_ID")
+
+# Fetch values from .env
+api_key = os.getenv('API_KEY')
+api_secret = os.getenv('API_SECRET')
+bot_token = os.getenv('BOT_TOKEN')
+chat_id = os.getenv('CHAT_ID')
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
