@@ -1,263 +1,201 @@
+import hashlib
 import requests
-import asyncio
+import hmac
 import json
-import os
-import hashlib
-import hmac
 import time
-import datetime
-import hashlib
-import hmac
-import base64
-from decimal import Decimal
-from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
-# Load environment variables from .env file
-load_dotenv()
+# API Keys and URLs
+API_KEY = 'jStY6DkilzfHFpexXd7aWim5us9qlK'
+API_SECRET = 'o6yy45lX5x0YX9dZoLFkkiP68p23fkVHTcgnXutgv3ZUNPmxHDBEb9lXggfQ'
+API_URL = "https://cdn.india.deltaex.org/v2/tickers/BTCUSD"
+ORDER_URL = "https://cdn.india.deltaex.org/v2/orders"
+OPEN_ORDERS_URL = "https://api.india.delta.exchange/v2/positions/margined"  # Open orders API
 
-
-# Fetch values from .env
-api_key = os.getenv('API_KEY')
-api_secret = os.getenv('API_SECRET')
-bot_token = os.getenv('BOT_TOKEN')
-chat_id = os.getenv('CHAT_ID')
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
     signature_data = method + timestamp + endpoint + payload
     message = bytes(signature_data, 'utf-8')
-    secret = bytes(api_secret, 'utf-8')
+    secret = bytes(API_SECRET, 'utf-8')
     hash = hmac.new(secret, message, hashlib.sha256)
     return hash.hexdigest(), timestamp
 
-def get_time_stamp():
-    d = datetime.datetime.utcnow()
-    epoch = datetime.datetime(1970,1,1)
-    return str(int((d - epoch).total_seconds()))
+def get_expiry():
+    """Fetches the nearest BTC expiry date in DDMMYY format"""
+    url = "https://cdn.india.deltaex.org/web/options/info"
+    headers = {
+        'Accept': '*/*',
+        'User-Agent': 'Mozilla/5.0',
+        'Referer': 'https://www.delta.exchange/'
+    }
 
-
-
-
-
-
-
-async def fetch_profile_data():
+    response = requests.get(url, headers=headers)
     
-   print("response")
-   send_message("Algo Start")    
+    if response.status_code == 200:
+        data = response.json()
 
-async def place_target_order(order_type,side,order_product,order_size,stop_order_type,stop_price):
-    # Define the payload
+        # Extract expiry dates for BTC call options
+        for contract in data.get("result", []):
+            if contract["contract_type"] == "call_options":
+                for item in contract["data"]:
+                    if item["asset"] == "BTC":
+                        expiry_dates = item["settlement_time"]
+                        if expiry_dates:
+                            # Convert the first expiry date to DDMMYY format
+                            nearest_expiry = datetime.strptime(expiry_dates[5], "%Y-%m-%dT%H:%M:%SZ")
+                            return nearest_expiry.strftime("%d%m%y")
+
+    print("Failed to fetch expiry date or no expiry available.")
+    return None  # Return None if data isn't available
+
+
+
+
+def get_tomorrow_expiry():
+    """ Returns tomorrow's expiry date in DDMMYY format """
+    return (datetime.now() + timedelta(days=1)).strftime("%d%m%y")
+
+def get_ticker(ticker):
+    """ Fetches BTC price from API """
+    response = requests.get("https://cdn.india.deltaex.org/v2/tickers/"+ticker)
+    if response.status_code == 200:
+        data = response.json()
+        price = float(data["result"]["mark_price"])
+        return price
+    else:
+        print("Failed to fetch BTC price")
+        return None
+
+def get_atm_strike():
+    """ Fetches BTC price and rounds to the nearest 500 to determine ATM strike """
+    response = requests.get(API_URL)
+    if response.status_code == 200:
+        data = response.json()
+        btc_price = float(data["result"]["mark_price"])
+        atm_strike = round(btc_price / 1000) * 1000
+        return atm_strike
+    else:
+        print("Failed to fetch BTC price")
+        return None
+
+
+def get_open_orders():
+    """ Fetches all open orders from API """
+    method = 'GET'
+    endpoint = '/v2/positions/margined'
+    payload = ""
+    signature, timestamp = generate_signature(method, endpoint, payload)
+
+    headers = {
+        'api-key': API_KEY,
+        'timestamp': timestamp,
+        'signature': signature,
+        'User-Agent': 'rest-client'
+    }
+
+    response = requests.get(OPEN_ORDERS_URL, headers=headers)
+    if response.status_code == 200:
+        return response.json().get("result", [])
+    else:
+        print(f"Failed to fetch open orders. Status code: {response.status_code}")
+        return []
+
+
+def order_exists(order_product_id):
+    """ Checks if an order for the given product symbol already exists """
+    open_orders = get_open_orders()
+    for order in open_orders:
+        if order["product_symbol"] == order_product_id:
+            return True
+    return False
+
+
+def place_order(order_type, side, order_product_id, order_size,target):
+    """ Places an order via REST API """
+    if order_exists(order_product_id):
+        print(f"Order for {order_product_id} already exists. Skipping...")
+        return
+
     payload = {
         "order_type": order_type,
         "side": side,
-        "product_id": int(order_product),
-        "stop_order_type": stop_order_type,
-        "stop_price": stop_price,
+        "product_symbol": order_product_id,
         "reduce_only": False,
-        "stop_trigger_method": "mark_price",
-        "size": order_size
-    }
-    # Fetch data from REST API
-    # Fetch data from REST API
-    method = 'POST'
-    endpoint = '/v2/orders'
-    payload_str = json.dumps(payload)
-    signature, timestamp = generate_signature(method, endpoint, payload_str)
-    timestamp = get_time_stamp() 
-
-    headers = {
-         'api-key': api_key,
-         'timestamp': timestamp,
-         'signature': signature,
-         'User-Agent': 'rest-client',
-         'Content-Type': 'application/json'
-           }
-
-    # Send the POST request with the payload
-    response = requests.post('https://cdn.india.deltaex.org/v2/orders', json=payload, headers=headers)
+        "size": order_size,
+        "post_only":"false",
+        "reduce_only":"false",
+        "time_in_force":"gtc",
+        "bracket_take_profit_price":target,
+        "bracket_take_profit_limit_price":target,
+        "bracket_stop_trigger_method":"mark_price"
     
-    # Check if the request was successful
-    if response.status_code == 200:
-        print("Order placed successfully.")
-        message = f"😀New Order:\n" \
-          f"Order Type: {payload['order_type']}\n" \
-          f"Side: {payload['side']}\n" \
-          f"Product ID: {payload['product_id']}\n" \
-          f"Stop Order Type: {payload['stop_order_type']}\n" \
-          f"Stop Price: {payload['stop_price']}\n" \
-          f"Reduce Only: {payload['reduce_only']}\n" \
-          f"Stop Trigger Method: {payload['stop_trigger_method']}\n" \
-          f"Size: {payload['size']}😀"
-        send_message(message)
-    else:
-        print("Failed to place order. Status code:", response.status_code)
-
-        
-async def place_order(order_type,side,order_product_id,order_size,stop_order_type,target_value ):
-    # Define the payload
-    payload = {
-        "order_type": order_type,
-        "side": side,
-        "product_id": int(order_product_id),
-        "reduce_only": False,     
-        "size": order_size
-    }
-    
-    # Fetch data from REST API
-    method = 'POST'
-    endpoint = '/v2/orders'
-    payload_str = json.dumps(payload)
-    signature, timestamp = generate_signature(method, endpoint, payload_str)
-    timestamp = get_time_stamp() 
-    
-
-    headers = {
-         'api-key': api_key,
-         'timestamp': timestamp,
-         'signature': signature,
-         'User-Agent': 'rest-client',
-         'Content-Type': 'application/json'
-           }
-    # Send the POST request with the payload
-    response = requests.post('https://cdn.india.deltaex.org/v2/orders', json=payload, headers=headers)
-    
-    # Check if the request was successful
-    if response.status_code == 200:
-        message = f"😀New Order:\n" \
-          f"Order Type: {payload['order_type']}\n" \
-          f"Side: {payload['side']}\n" \
-          f"Product ID: {payload['product_id']}\n" \
-          f"Reduce Only: {'Yes' if payload['reduce_only'] else 'No'}\n" \
-          f"Size: {payload['size']}😀"
-        send_message(message)
-        await place_target_order("market_order","sell",order_product_id,1,"take_profit_order",target_value )
-    else:
-        send_message(response)
-
-async def fetch_position_data():
-    last_msg_time = 0  # Store last message sent timestamp
-
-    while True:
-        payload = ''
-        method = 'GET'
-        endpoint = '/v2/positions/margined'
-        payload_str = json.dumps(payload)
-        signature, timestamp = generate_signature(method, endpoint, payload)
-        timestamp = get_time_stamp()
-
-        headers = {
-            'api-key': api_key,
-            'timestamp': timestamp,
-            'signature': signature,
-            'User-Agent': 'rest-client',
-            'Content-Type': 'application/json'
         }
-
-        r = requests.get('https://cdn.india.deltaex.org/v2/positions/margined', headers=headers)
-        position_data = r.json()  
-
-        for result in position_data["result"]:
-            product_symbol = result["product_symbol"]
-            size = result["size"]
-            unrealized_pnl = result["unrealized_pnl"]
-            entry_price = result["entry_price"]
-            mark_price = result["mark_price"]
-
-            percentage = int(size) * 1  
-            avg_price_value = float(entry_price) - (float(entry_price) * (percentage / 100))
-            add_price_value = float(entry_price) + (float(entry_price) * (percentage / 100))
-
-            digit_count = count_digits_after_point(mark_price)
-            tick_size = 1 / digit_count
-            target = float(mark_price) * 5 / 100 + float(mark_price)
-            number = round((target / tick_size) * tick_size, digit_count)
-            target_value = scientific_to_decimal(number)
-
-            message = f"Symbol: {product_symbol}\n" \
-                      f"Size: {size}\n" \
-                      f"Unrealized PnL: {round(float(unrealized_pnl), digit_count)}\n" \
-                      f"Entry Price: {round(float(entry_price), digit_count)}\n" \
-                      f"Next_Avg_Price: {round(float(avg_price_value), digit_count)}\n" \
-                      f"Next_Add_Price: {round(float(add_price_value), digit_count)}\n" \
-                      f"Mark Price: {round(float(mark_price), digit_count)}\n" \
-                      f"Target Value: {round(float(target_value), digit_count)}\n"
-
-            print(message)
-
-            # Send message only if 60 seconds have passed since last message
-            if time.time() - last_msg_time >= 60:
-                send_message(message)
-                last_msg_time = time.time()  # Update last message time
-
-            if float(mark_price) < avg_price_value or float(mark_price) > add_price_value:
-                print("Ready to buy")
-                await place_order("market_order", "buy", result["product_id"], 1, 0, target_value)
-
-        await asyncio.sleep(10)  # Fetch data every 30 seconds
-
-
-def count_digits_after_point(number):
-    # Convert the number to a string
-    number_str = str(number)
+  
     
-    # Split the string at the decimal point
-    parts = number_str.split('.')
-    
-    # Check if there is a decimal part
-    if len(parts) == 2:
-        # Return the length of the decimal part
-        return len(parts[1])
-    else:
-        # Return 0 if there is no decimal part
-        return 0
+    method = 'POST'
+    endpoint = '/v2/orders'
+    payload_str = json.dumps(payload)
+    signature, timestamp = generate_signature(method, endpoint, payload_str)
 
-def scientific_to_decimal(number):
-    # Convert the number to a Decimal and return as string
-    decimal_number = Decimal(number)
-    return str(decimal_number)
-
-def send_message(message):
-    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    params = {'chat_id': chat_id, 'text': message}
-
-
-    response = requests.post(url, json=params)
-    if response.status_code == 200:
-        print('Message sent successfully!')
-    else:
-        print(f'Failed to send message. Error: {response.status_code} - {response.text}')
-
-def auto_topup(message):
     headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'api-key': '****',
-      'signature': '****',
-      'timestamp': '****'
-      }
-
-    r = requests.put('https://api.delta.exchange/v2/positions/auto_topup', params={
-    "product_id": 0,
-    "auto_topup": "false"
-    }, headers = headers)
-    print(r.json())
-
-
-async def main():
-    while True:
-        try:
-            profile_task = asyncio.create_task(fetch_profile_data())
-            position_task = asyncio.create_task(fetch_position_data())
-            await asyncio.gather(position_task, profile_task)
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            # Optionally, you can add code here to handle the error, such as logging it
-            # or sending a notification
-        finally:
-            # Optionally, you can add a delay here before retrying
-            await asyncio.sleep(10)
+        'api-key': API_KEY,
+        'timestamp': timestamp,
+        'signature': signature,
+        'User-Agent': 'rest-client',
+        'Content-Type': 'application/json'
+    }
     
 
-# Run the main coroutine
-asyncio.run(main())
+    response = requests.post(ORDER_URL, json=payload, headers=headers)
+
+    if response.status_code == 200:
+        print(f"Order placed successfully: {json.dumps(payload, indent=4)}")
+       
+       
+    else:
+        print(f"Failed to place order. Status code: {response.status_code}")
+
+
+
+
+
+if __name__ == "__main__":
+    previous_atm_strikes = set()  # Store last ATM strikes
+
+while True:
+    atm_strike = get_atm_strike()
+    expiry = get_expiry()
+
+    if atm_strike and expiry:
+        strikes = [atm_strike - 1000, atm_strike, atm_strike + 1000]  # Nearest 3 strikes
+
+        for strike in strikes:
+            call_option = f"C-BTC-{strike}-{expiry}"
+            put_option = f"P-BTC-{strike}-{expiry}"
+
+            if strike not in previous_atm_strikes:
+                print(f"Checking orders for {strike}...")
+
+                # Get option prices
+                price_call = get_ticker(call_option)
+                price_put = get_ticker(put_option)
+                
+                target_call = price_call * 1.25 if price_call else None
+                target_put = price_put * 1.25 if price_put else None
+
+                if target_call:
+                    place_order("market_order", "buy", call_option, 1, target_call)
+                if target_put:
+                    place_order("market_order", "buy", put_option, 1, target_put)
+
+                # Track placed orders
+                previous_atm_strikes.add(strike)
+
+            else:
+                print(f"Orders for {strike} already exist. Skipping...")
+
+    else:
+        print("Failed to get ATM strike or expiry. Retrying...")
+
+    time.sleep(5)
