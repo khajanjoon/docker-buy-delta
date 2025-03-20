@@ -161,14 +161,15 @@ def place_order(order_type, side, order_product_id, order_size,target):
 
 
 if __name__ == "__main__":
-    previous_atm_strikes = set()  # Store last ATM strikes
+    previous_atm_strikes = set()
 
 while True:
     atm_strike = get_atm_strike()
     expiry = get_expiry()
 
     if atm_strike and expiry:
-        strikes = [atm_strike - 1000, atm_strike, atm_strike + 1000]  # Nearest 3 strikes
+        # Generate strikes from ATM -6000 to ATM +6000 in 1000 increments
+        strikes = [atm_strike + i for i in range(-6000, 7000, 1000)]
 
         for strike in strikes:
             call_option = f"C-BTC-{strike}-{expiry}"
@@ -189,7 +190,6 @@ while True:
                 if target_put:
                     place_order("market_order", "buy", put_option, 1, target_put)
 
-                # Track placed orders
                 previous_atm_strikes.add(strike)
 
             else:
