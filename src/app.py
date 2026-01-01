@@ -8,8 +8,15 @@ import time
 import datetime
 from decimal import Decimal
 
-api_key = 'WpHml8NeklL4lM4vA4Xh2l0sr7SY3w'
-api_secret = 'jbvtVB9fHnQmYa4awmGt1zKZZ1f6c7sBzozNfJOoUIeg4nsKaJeNvwIXihYG'
+api_key = 'TcwdPNNYGjjgkRW4BRIAnjL7z5TLyJ'
+api_secret = 'B5ALo5Mh8mgUREB6oGD4oyX3y185oElaz1LoU6Y3X5ZX0s8TvFZcX4YTVToJ'
+
+# ===== CONFIG =====
+TRADE_SYMBOL = "FILUSD"   # change to your pair
+Initial_Size = 5
+Entry_Percantage = 1
+Target_Percantage = 2
+
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
@@ -99,7 +106,7 @@ async def place_order(order_type, side, order_product_id, order_size, stop_order
             "market_order",
             "sell",
             order_product_id,
-            1,
+            Initial_Size,
             "take_profit_order",
             target_value
         )
@@ -131,18 +138,24 @@ async def fetch_position_data():
         print("Algo Live")
 
         for result in position_data.get("result", []):
+
+            # ✅ FILTER ONLY ONE SYMBOL
+            if result["product_symbol"] != TRADE_SYMBOL:
+                continue
+
             product_id = result["product_id"]
             product_symbol = result["product_symbol"]
-            size = result["size"]
+            size = float(result["size"])
             entry_price = float(result["entry_price"])
             mark_price = float(result["mark_price"])
             unrealized_pnl = float(result["unrealized_pnl"])
 
-            percentage = int(size) * .75
+            percentage = (size/Initial_Size) * Entry_Percantage 
+
             next_entry = entry_price - (entry_price * percentage / 100)
 
             digit_count = count_digits_after_point(mark_price)
-            target = mark_price + (mark_price * 2 / 100)
+            target = mark_price + (mark_price * Target_Percantage  / 100)
             target = round(target, digit_count)
 
             print(
@@ -150,7 +163,6 @@ async def fetch_position_data():
                 f"Entry: {entry_price} | Mark: {mark_price} | "
                 f"Next_entry: {next_entry} | "
                 f"Target: {target}"
-                
             )
 
             if mark_price < next_entry:
@@ -159,12 +171,14 @@ async def fetch_position_data():
                     "market_order",
                     "buy",
                     product_id,
-                    1,
+                    Initial_Size,
                     0,
                     target
                 )
 
         await asyncio.sleep(30)
+
+
 
 def count_digits_after_point(number):
     s = str(number)
