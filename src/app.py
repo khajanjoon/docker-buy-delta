@@ -12,8 +12,8 @@ api_key = 'TcwdPNNYGjjgkRW4BRIAnjL7z5TLyJ'
 api_secret = 'B5ALo5Mh8mgUREB6oGD4oyX3y185oElaz1LoU6Y3X5ZX0s8TvFZcX4YTVToJ'
 
 # ===== CONFIG =====
-TRADE_SYMBOL = "UNIUSD"   # change to your pair
-Initial_Size = 2
+TRADE_SYMBOL = "AVAXUSD"   # change to your pair
+Initial_Size = 1
 Entry_Percantage = 1
 Target_Percantage = 2
 
