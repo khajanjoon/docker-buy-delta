@@ -8,8 +8,8 @@ import time
 import datetime
 from decimal import Decimal
 
-api_key = 'SQc3LSFbHIO0hiZoSLFJS5iFpr9ZJd'
-api_secret = '5AVD4DEyOUF2xmSrhjccoP2BDezqXkrmMvXGkDryBigcxPk57MdFVSgnZCO1'
+api_key = 'WpHml8NeklL4lM4vA4Xh2l0sr7SY3w'
+api_secret = 'jbvtVB9fHnQmYa4awmGt1zKZZ1f6c7sBzozNfJOoUIeg4nsKaJeNvwIXihYG'
 
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
