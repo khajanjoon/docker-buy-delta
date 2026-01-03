@@ -21,11 +21,11 @@ BASE_URL = "https://cdn.india.deltaex.org"
 # =========================
 MQTT_BROKER = "45.120.136.157"
 MQTT_PORT = 1883
-MQTT_STATE_TOPIC = "delta/account"
-MQTT_CLIENT_ID = "delta_india_bot"
+MQTT_STATE_TOPIC = "delta/account/khajan"
+MQTT_CLIENT_ID = "delta_india_bot_khajan"
 
 HA_PREFIX = "homeassistant"
-DEVICE_ID = "delta_trading_bot"
+DEVICE_ID = "delta_trading_bot_khajan"
 
 # =========================
 # SYMBOL CONFIG
@@ -33,6 +33,7 @@ DEVICE_ID = "delta_trading_bot"
 SYMBOL_CONFIG = {
     "ETHUSD": {"qty": 1, "leverage": 200, "contract_value": 0.01},
     "BTCUSD": {"qty": 1, "leverage": 200, "contract_value": 0.001},
+    "XRPUSD": {"qty": 25, "leverage": 100, "contract_value": 1},
 }
 
 # =========================
@@ -40,7 +41,7 @@ SYMBOL_CONFIG = {
 # =========================
 DROP_PERCENT = 0.75
 TARGET_PERCENT = 0.75
-MAX_BUYS = 5
+MAX_BUYS = 8
 MAX_MARGIN_USAGE = 0.60
 MAX_EQUITY_RISK = 0.50
 SLEEP_TIME = 10
@@ -74,16 +75,16 @@ class TradingBot:
         self.publish_ha_discovery()
         self.publish_position_discovery()
 
-        print("\n🚀 Delta India Bot Started (Trading + HA)\n")
+        print("\n🚀 Delta USD Trading Bot Started\n")
 
     # =========================
     # HOME ASSISTANT – ACCOUNT
     # =========================
     def publish_ha_discovery(self):
         sensors = {
-            "wallet_inr": ("Wallet INR", "{{ value_json.wallet_inr }}"),
-            "equity_inr": ("Equity INR", "{{ value_json.equity_inr }}"),
-            "blocked_margin_inr": ("Blocked Margin INR", "{{ value_json.blocked_margin_inr }}"),
+            "wallet_usd": ("Wallet USD", "{{ value_json.wallet_usd }}"),
+            "equity_usd": ("Equity USD", "{{ value_json.equity_usd }}"),
+            "blocked_margin_usd": ("Blocked Margin USD", "{{ value_json.blocked_margin_usd }}"),
         }
 
         for key, (name, template) in sensors.items():
@@ -91,10 +92,10 @@ class TradingBot:
                 "name": name,
                 "state_topic": MQTT_STATE_TOPIC,
                 "value_template": template,
-                "unit_of_measurement": "INR",
-                "unique_id": f"{DEVICE_ID}_{key}",
+                "unit_of_measurement": "USD",
                 "device_class": "monetary",
                 "state_class": "measurement",
+                "unique_id": f"{DEVICE_ID}_{key}",
                 "device": {
                     "identifiers": [DEVICE_ID],
                     "name": "Delta Trading Bot",
@@ -109,7 +110,7 @@ class TradingBot:
             )
 
     # =========================
-    # HOME ASSISTANT – POSITION
+    # HOME ASSISTANT – POSITIONS
     # =========================
     def publish_position_discovery(self):
         for symbol in SYMBOL_CONFIG:
@@ -117,9 +118,9 @@ class TradingBot:
 
             sensors = {
                 f"{base}_size": ("Position Size", "{{ value_json.%s_size }}" % base, None),
-                f"{base}_entry": ("Entry Price", "{{ value_json.%s_entry }}" % base, "INR"),
-                f"{base}_mark": ("Mark Price", "{{ value_json.%s_mark }}" % base, "INR"),
-                f"{base}_pnl": ("Unrealized PnL", "{{ value_json.%s_pnl }}" % base, "INR"),
+                f"{base}_entry": ("Entry Price", "{{ value_json.%s_entry }}" % base, "USD"),
+                f"{base}_mark": ("Mark Price", "{{ value_json.%s_mark }}" % base, "USD"),
+                f"{base}_pnl": ("Unrealized PnL", "{{ value_json.%s_pnl }}" % base, "USD"),
             }
 
             for key, (name, template, unit) in sensors.items():
@@ -147,7 +148,7 @@ class TradingBot:
                 )
 
     # =========================
-    # BALANCE
+    # BALANCE (USD ONLY)
     # =========================
     def get_user_balance(self):
         sig, ts = generate_signature("GET", "/v2/wallet/balances", "")
@@ -160,13 +161,12 @@ class TradingBot:
         for asset in r.json()["result"]:
             if asset["asset_symbol"] == "USD":
                 return {
-                    "wallet_inr": float(asset["available_balance_inr"]),
-                    "equity_inr": float(asset["balance_inr"]),
-                    "blocked_margin_inr": float(asset["blocked_margin"]) *
-                                          float(asset["balance_inr"]) /
-                                          float(asset["balance"])
+                    "wallet_usd": float(asset["available_balance"]),
+                    "equity_usd": float(asset["balance"]),
+                    "blocked_margin_usd": float(asset["blocked_margin"])
                 }
-        return {"wallet_inr": 0, "equity_inr": 0, "blocked_margin_inr": 0}
+
+        return {"wallet_usd": 0, "equity_usd": 0, "blocked_margin_usd": 0}
 
     # =========================
     # POSITIONS
@@ -200,7 +200,7 @@ class TradingBot:
         return float(r.json()["result"]["mark_price"])
 
     # =========================
-    # BUY + TP
+    # BUY + TAKE PROFIT
     # =========================
     def place_buy_with_tp(self, product_id, qty, target_price):
         payload = {
@@ -227,7 +227,7 @@ class TradingBot:
             "order_type": "market_order",
             "side": "sell",
             "product_id": int(product_id),
-            "stop_order_type": "stop_order_type",
+            "stop_order_type": "take_profit_order",
             "stop_price": price,
             "stop_trigger_method": "mark_price",
             "reduce_only": True,
@@ -246,7 +246,12 @@ class TradingBot:
     # MQTT STATE
     # =========================
     def publish_state(self, bal, pos_map):
-        payload = {**bal, "timestamp": int(time.time())}
+        payload = {
+            "wallet_usd": bal["wallet_usd"],
+            "equity_usd": bal["equity_usd"],
+            "blocked_margin_usd": bal["blocked_margin_usd"],
+            "timestamp": int(time.time())
+        }
 
         for symbol in SYMBOL_CONFIG:
             key = symbol.lower()
@@ -260,7 +265,7 @@ class TradingBot:
         self.mqtt.publish(MQTT_STATE_TOPIC, json.dumps(payload), qos=1)
 
     # =========================
-    # MAIN LOOP (TRADING UNCHANGED)
+    # MAIN LOOP
     # =========================
     def run(self):
         while True:
@@ -283,7 +288,7 @@ class TradingBot:
                     pos = pos_map.get(symbol)
 
                     if not pos:
-                        if margin_needed <= bal["wallet_inr"] * MAX_MARGIN_USAGE:
+                        if margin_needed <= bal["wallet_usd"] * MAX_MARGIN_USAGE:
                             pid = self.get_product_id(symbol)
                             tp = mark * (1 + TARGET_PERCENT / 100)
                             self.place_buy_with_tp(pid, qty, round(tp, 4))
@@ -293,7 +298,7 @@ class TradingBot:
                     entry = float(pos["entry_price"])
                     margin_used = float(pos["margin"])
 
-                    if margin_used > bal["equity_inr"] * MAX_EQUITY_RISK:
+                    if margin_used > bal["equity_usd"] * MAX_EQUITY_RISK:
                         continue
 
                     buy_count = int(size / qty)
@@ -301,18 +306,15 @@ class TradingBot:
                         continue
 
                     next_price = entry * (1 - (DROP_PERCENT / 100) * buy_count)
-                    
+
                     if mark < next_price:
                         tp = mark * (1 + TARGET_PERCENT / 100)
                         self.place_buy_with_tp(pos["product_id"], qty, round(tp, 4))
 
-                    
                     print(
-                     f"{symbol} | Size: {size} | "
-                     f"Entry: {entry} | Mark: {mark} | "
-                     f"Next_entry: {next_price} | "
-                    
-                         )
+                        f"{symbol} | Size:{size} | Entry:{entry} | "
+                        f"Mark:{mark} | Next:{next_price}"
+                    )
 
                 time.sleep(SLEEP_TIME)
 
