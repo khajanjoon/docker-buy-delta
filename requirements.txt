@@ -1,3 +1,10 @@
-requests
+numpy
+python-socketio
 asyncio
+aiohttp
+icecream
+requests
 python-dotenv
+scipy
+python-dotenv
+paho.mqtt
