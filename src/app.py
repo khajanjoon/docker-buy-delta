@@ -1,199 +1,327 @@
 import requests
-import asyncio
 import json
-import os
-import hashlib
-import hmac
 import time
-import datetime
-from decimal import Decimal
+import hmac
+import hashlib
+import os
+from dotenv import load_dotenv
+import paho.mqtt.client as mqtt
 
-api_key = 'TcwdPNNYGjjgkRW4BRIAnjL7z5TLyJ'
-api_secret = 'B5ALo5Mh8mgUREB6oGD4oyX3y185oElaz1LoU6Y3X5ZX0s8TvFZcX4YTVToJ'
+# =========================
+# LOAD ENV
+# =========================
+load_dotenv()
+API_KEY = os.getenv("DELTA_API_KEY")
+API_SECRET = os.getenv("DELTA_API_SECRET")
 
-# ===== CONFIG =====
-TRADE_SYMBOL = "AVAXUSD"   # change to your pair
-Initial_Size = 1
-Entry_Percantage = 1
-Target_Percantage = 2
+BASE_URL = "https://cdn.india.deltaex.org"
 
+# =========================
+# MQTT CONFIG
+# =========================
+MQTT_BROKER = "45.120.136.157"
+MQTT_PORT = 1883
+MQTT_STATE_TOPIC = "delta/account"
+MQTT_CLIENT_ID = "delta_india_bot"
 
+HA_PREFIX = "homeassistant"
+DEVICE_ID = "delta_trading_bot"
+
+# =========================
+# SYMBOL CONFIG
+# =========================
+SYMBOL_CONFIG = {
+    "ETHUSD": {"qty": 1, "leverage": 200, "contract_value": 0.01},
+    "BTCUSD": {"qty": 1, "leverage": 200, "contract_value": 0.001},
+}
+
+# =========================
+# STRATEGY SETTINGS
+# =========================
+DROP_PERCENT = 0.75
+TARGET_PERCENT = 0.75
+MAX_BUYS = 5
+MAX_MARGIN_USAGE = 0.60
+MAX_EQUITY_RISK = 0.50
+SLEEP_TIME = 10
+
+# =========================
+# SIGNATURE
+# =========================
 def generate_signature(method, endpoint, payload):
     timestamp = str(int(time.time()))
-    signature_data = method + timestamp + endpoint + payload
-    message = bytes(signature_data, 'utf-8')
-    secret = bytes(api_secret, 'utf-8')
-    hash = hmac.new(secret, message, hashlib.sha256)
-    return hash.hexdigest(), timestamp
+    message = method + timestamp + endpoint + payload
+    signature = hmac.new(
+        API_SECRET.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    return signature, timestamp
 
-def get_time_stamp():
-    d = datetime.datetime.utcnow()
-    epoch = datetime.datetime(1970,1,1)
-    return str(int((d - epoch).total_seconds()))
-
-async def fetch_profile_data():
-    print("Algo Start")
-
-async def place_target_order(order_type, side, order_product, order_size, stop_order_type, stop_price):
-    payload = {
-        "order_type": order_type,
-        "side": side,
-        "product_id": int(order_product),
-        "stop_order_type": stop_order_type,
-        "stop_price": stop_price,
-        "reduce_only": False,
-        "stop_trigger_method": "mark_price",
-        "size": order_size
-    }
-
-    method = 'POST'
-    endpoint = '/v2/orders'
-    payload_str = json.dumps(payload)
-    signature, _ = generate_signature(method, endpoint, payload_str)
-    timestamp = get_time_stamp()
-
-    headers = {
-        'api-key': api_key,
-        'timestamp': timestamp,
-        'signature': signature,
-        'User-Agent': 'rest-client',
-        'Content-Type': 'application/json'
-    }
-
-    response = requests.post(
-        'https://cdn.india.deltaex.org/v2/orders',
-        json=payload,
-        headers=headers
-    )
-
-    if response.status_code == 200:
-        print("Target order placed successfully.")
-    else:
-        print("Target order failed:", response.text)
-
-async def place_order(order_type, side, order_product_id, order_size, stop_order_type, target_value):
-    payload = {
-        "order_type": order_type,
-        "side": side,
-        "product_id": int(order_product_id),
-        "reduce_only": False,
-        "size": order_size
-    }
-
-    method = 'POST'
-    endpoint = '/v2/orders'
-    payload_str = json.dumps(payload)
-    signature, _ = generate_signature(method, endpoint, payload_str)
-    timestamp = get_time_stamp()
-
-    headers = {
-        'api-key': api_key,
-        'timestamp': timestamp,
-        'signature': signature,
-        'User-Agent': 'rest-client',
-        'Content-Type': 'application/json'
-    }
-
-    response = requests.post(
-        'https://cdn.india.deltaex.org/v2/orders',
-        json=payload,
-        headers=headers
-    )
-
-    if response.status_code == 200:
-        print("Main order placed successfully.")
-        await place_target_order(
-            "market_order",
-            "sell",
-            order_product_id,
-            Initial_Size,
-            "take_profit_order",
-            target_value
+# =========================
+# TRADING BOT
+# =========================
+class TradingBot:
+    def __init__(self):
+        self.mqtt = mqtt.Client(
+            client_id=MQTT_CLIENT_ID,
+            protocol=mqtt.MQTTv311,
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION1
         )
-    else:
-        print("Main order failed:", response.text)
+        self.mqtt.connect(MQTT_BROKER, MQTT_PORT, 60)
+        self.mqtt.loop_start()
 
-async def fetch_position_data():
-    while True:
-        method = 'GET'
-        endpoint = '/v2/positions/margined'
-        payload = ''
-        signature, _ = generate_signature(method, endpoint, payload)
-        timestamp = get_time_stamp()
+        self.publish_ha_discovery()
+        self.publish_position_discovery()
 
-        headers = {
-            'api-key': api_key,
-            'timestamp': timestamp,
-            'signature': signature,
-            'User-Agent': 'rest-client',
-            'Content-Type': 'application/json'
+        print("\n🚀 Delta India Bot Started (Trading + HA)\n")
+
+    # =========================
+    # HOME ASSISTANT – ACCOUNT
+    # =========================
+    def publish_ha_discovery(self):
+        sensors = {
+            "wallet_inr": ("Wallet INR", "{{ value_json.wallet_inr }}"),
+            "equity_inr": ("Equity INR", "{{ value_json.equity_inr }}"),
+            "blocked_margin_inr": ("Blocked Margin INR", "{{ value_json.blocked_margin_inr }}"),
         }
 
-        r = requests.get(
-            'https://cdn.india.deltaex.org/v2/positions/margined',
-            headers=headers
-        )
-
-        position_data = r.json()
-        print("Algo Live")
-
-        for result in position_data.get("result", []):
-
-            # ✅ FILTER ONLY ONE SYMBOL
-            if result["product_symbol"] != TRADE_SYMBOL:
-                continue
-
-            product_id = result["product_id"]
-            product_symbol = result["product_symbol"]
-            size = float(result["size"])
-            entry_price = float(result["entry_price"])
-            mark_price = float(result["mark_price"])
-            unrealized_pnl = float(result["unrealized_pnl"])
-
-            percentage = (size/Initial_Size) * Entry_Percantage 
-
-            next_entry = entry_price - (entry_price * percentage / 100)
-
-            digit_count = count_digits_after_point(mark_price)
-            target = mark_price + (mark_price * Target_Percantage  / 100)
-            target = round(target, digit_count)
-
-            print(
-                f"{product_symbol} | Size: {size} | "
-                f"Entry: {entry_price} | Mark: {mark_price} | "
-                f"Next_entry: {next_entry} | "
-                f"Target: {target}"
+        for key, (name, template) in sensors.items():
+            payload = {
+                "name": name,
+                "state_topic": MQTT_STATE_TOPIC,
+                "value_template": template,
+                "unit_of_measurement": "INR",
+                "unique_id": f"{DEVICE_ID}_{key}",
+                "device_class": "monetary",
+                "state_class": "measurement",
+                "device": {
+                    "identifiers": [DEVICE_ID],
+                    "name": "Delta Trading Bot",
+                    "manufacturer": "Custom",
+                    "model": "Algo Bot"
+                }
+            }
+            self.mqtt.publish(
+                f"{HA_PREFIX}/sensor/{DEVICE_ID}_{key}/config",
+                json.dumps(payload),
+                retain=True
             )
 
-            if mark_price < next_entry:
-                print("Ready to buy")
-                await place_order(
-                    "market_order",
-                    "buy",
-                    product_id,
-                    Initial_Size,
-                    0,
-                    target
+    # =========================
+    # HOME ASSISTANT – POSITION
+    # =========================
+    def publish_position_discovery(self):
+        for symbol in SYMBOL_CONFIG:
+            base = symbol.lower()
+
+            sensors = {
+                f"{base}_size": ("Position Size", "{{ value_json.%s_size }}" % base, None),
+                f"{base}_entry": ("Entry Price", "{{ value_json.%s_entry }}" % base, "INR"),
+                f"{base}_mark": ("Mark Price", "{{ value_json.%s_mark }}" % base, "INR"),
+                f"{base}_pnl": ("Unrealized PnL", "{{ value_json.%s_pnl }}" % base, "INR"),
+            }
+
+            for key, (name, template, unit) in sensors.items():
+                payload = {
+                    "name": f"{symbol} {name}",
+                    "state_topic": MQTT_STATE_TOPIC,
+                    "value_template": template,
+                    "unique_id": f"{DEVICE_ID}_{key}",
+                    "device": {
+                        "identifiers": [DEVICE_ID],
+                        "name": "Delta Trading Bot",
+                        "manufacturer": "Custom",
+                        "model": "Algo Bot"
+                    }
+                }
+                if unit:
+                    payload["unit_of_measurement"] = unit
+                    payload["device_class"] = "monetary"
+                    payload["state_class"] = "measurement"
+
+                self.mqtt.publish(
+                    f"{HA_PREFIX}/sensor/{DEVICE_ID}_{key}/config",
+                    json.dumps(payload),
+                    retain=True
                 )
 
-        await asyncio.sleep(30)
+    # =========================
+    # BALANCE
+    # =========================
+    def get_user_balance(self):
+        sig, ts = generate_signature("GET", "/v2/wallet/balances", "")
+        r = requests.get(
+            BASE_URL + "/v2/wallet/balances",
+            headers={"api-key": API_KEY, "timestamp": ts, "signature": sig}
+        )
+        r.raise_for_status()
 
+        for asset in r.json()["result"]:
+            if asset["asset_symbol"] == "USD":
+                return {
+                    "wallet_inr": float(asset["available_balance_inr"]),
+                    "equity_inr": float(asset["balance_inr"]),
+                    "blocked_margin_inr": float(asset["blocked_margin"]) *
+                                          float(asset["balance_inr"]) /
+                                          float(asset["balance"])
+                }
+        return {"wallet_inr": 0, "equity_inr": 0, "blocked_margin_inr": 0}
 
+    # =========================
+    # POSITIONS
+    # =========================
+    def get_positions(self):
+        sig, ts = generate_signature("GET", "/v2/positions/margined", "")
+        r = requests.get(
+            BASE_URL + "/v2/positions/margined",
+            headers={"api-key": API_KEY, "timestamp": ts, "signature": sig}
+        )
+        r.raise_for_status()
+        return r.json()["result"]
 
-def count_digits_after_point(number):
-    s = str(number)
-    return len(s.split('.')[1]) if '.' in s else 0
+    # =========================
+    # PRODUCT ID
+    # =========================
+    def get_product_id(self, symbol):
+        r = requests.get(BASE_URL + "/v2/products")
+        r.raise_for_status()
+        for p in r.json()["result"]:
+            if p["symbol"] == symbol:
+                return p["id"]
+        return None
 
-async def main():
-    while True:
-        try:
-            await asyncio.gather(
-                fetch_profile_data(),
-                fetch_position_data()
-            )
-        except Exception as e:
-            print("Error:", e)
-        finally:
-            await asyncio.sleep(10)
+    # =========================
+    # MARK PRICE
+    # =========================
+    def get_mark_price(self, symbol):
+        r = requests.get(f"{BASE_URL}/v2/tickers/{symbol}")
+        r.raise_for_status()
+        return float(r.json()["result"]["mark_price"])
 
-asyncio.run(main())
+    # =========================
+    # BUY + TP
+    # =========================
+    def place_buy_with_tp(self, product_id, qty, target_price):
+        payload = {
+            "order_type": "market_order",
+            "side": "buy",
+            "product_id": int(product_id),
+            "reduce_only": False,
+            "size": qty,
+        }
+
+        sig, ts = generate_signature("POST", "/v2/orders", json.dumps(payload))
+        r = requests.post(
+            BASE_URL + "/v2/orders",
+            json=payload,
+            headers={"api-key": API_KEY, "timestamp": ts, "signature": sig}
+        )
+        print("🛒 BUY:", r.json())
+
+        if r.status_code == 200:
+            self.place_take_profit(product_id, qty, target_price)
+
+    def place_take_profit(self, product_id, qty, price):
+        payload = {
+            "order_type": "market_order",
+            "side": "sell",
+            "product_id": int(product_id),
+            "stop_order_type": "stop_order_type",
+            "stop_price": price,
+            "stop_trigger_method": "mark_price",
+            "reduce_only": True,
+            "size": qty,
+        }
+
+        sig, ts = generate_signature("POST", "/v2/orders", json.dumps(payload))
+        r = requests.post(
+            BASE_URL + "/v2/orders",
+            json=payload,
+            headers={"api-key": API_KEY, "timestamp": ts, "signature": sig}
+        )
+        print("🎯 TP:", r.json())
+
+    # =========================
+    # MQTT STATE
+    # =========================
+    def publish_state(self, bal, pos_map):
+        payload = {**bal, "timestamp": int(time.time())}
+
+        for symbol in SYMBOL_CONFIG:
+            key = symbol.lower()
+            pos = pos_map.get(symbol)
+
+            payload[f"{key}_size"] = float(pos["size"]) if pos else 0
+            payload[f"{key}_entry"] = float(pos["entry_price"]) if pos else 0
+            payload[f"{key}_mark"] = float(pos["mark_price"]) if pos else 0
+            payload[f"{key}_pnl"] = float(pos["unrealized_pnl"]) if pos else 0
+
+        self.mqtt.publish(MQTT_STATE_TOPIC, json.dumps(payload), qos=1)
+
+    # =========================
+    # MAIN LOOP (TRADING UNCHANGED)
+    # =========================
+    def run(self):
+        while True:
+            try:
+                bal = self.get_user_balance()
+                positions = self.get_positions()
+                pos_map = {p["product_symbol"]: p for p in positions}
+
+                self.publish_state(bal, pos_map)
+
+                for symbol, cfg in SYMBOL_CONFIG.items():
+                    qty = cfg["qty"]
+                    leverage = cfg["leverage"]
+                    cv = cfg["contract_value"]
+
+                    mark = self.get_mark_price(symbol)
+                    notional = qty * mark * cv
+                    margin_needed = notional / leverage
+
+                    pos = pos_map.get(symbol)
+
+                    if not pos:
+                        if margin_needed <= bal["wallet_inr"] * MAX_MARGIN_USAGE:
+                            pid = self.get_product_id(symbol)
+                            tp = mark * (1 + TARGET_PERCENT / 100)
+                            self.place_buy_with_tp(pid, qty, round(tp, 4))
+                        continue
+
+                    size = abs(float(pos["size"]))
+                    entry = float(pos["entry_price"])
+                    margin_used = float(pos["margin"])
+
+                    if margin_used > bal["equity_inr"] * MAX_EQUITY_RISK:
+                        continue
+
+                    buy_count = int(size / qty)
+                    if buy_count >= MAX_BUYS:
+                        continue
+
+                    next_price = entry * (1 - (DROP_PERCENT / 100) * buy_count)
+                    
+                    if mark < next_price:
+                        tp = mark * (1 + TARGET_PERCENT / 100)
+                        self.place_buy_with_tp(pos["product_id"], qty, round(tp, 4))
+
+                    
+                    print(
+                     f"{symbol} | Size: {size} | "
+                     f"Entry: {entry} | Mark: {mark} | "
+                     f"Next_entry: {next_price} | "
+                    
+                         )
+
+                time.sleep(SLEEP_TIME)
+
+            except Exception as e:
+                print("❌ ERROR:", e)
+                time.sleep(5)
+
+# =========================
+# START
+# =========================
+if __name__ == "__main__":
+    TradingBot().run()
